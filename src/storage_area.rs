@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use bitflags::bitflags;
 
 use crate::bindings::{
@@ -10,30 +8,27 @@ use crate::bindings::{
     CGOS_STORAGE_AREA_RAM, CGOS_STORAGE_AREA_UNKNOWN,
 };
 
-pub struct StorageArea<'library> {
+pub struct StorageArea {
     handle: u32,
     unit: u32,
-    _library_lifetime: PhantomData<&'library ()>,
 }
 
-impl<'library> StorageArea<'library> {
+impl StorageArea {
     pub(crate) fn amount(handle: u32, type_: StorageAreaType) -> usize {
         unsafe { CgosStorageAreaCount(handle, type_.bits()) as usize }
     }
 
-    pub(crate) fn from_index(handle: u32, index: usize) -> StorageArea<'library> {
+    pub(crate) fn from_index(handle: u32, index: usize) -> StorageArea {
         Self {
             handle,
             unit: index.try_into().unwrap(),
-            _library_lifetime: PhantomData,
         }
     }
 
-    pub(crate) fn from_type(handle: u32, type_: StorageAreaType) -> StorageArea<'library> {
+    pub(crate) fn from_type(handle: u32, type_: StorageAreaType) -> StorageArea {
         Self {
             handle,
             unit: type_.bits(),
-            _library_lifetime: PhantomData,
         }
     }
 

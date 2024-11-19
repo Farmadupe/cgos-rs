@@ -1,7 +1,4 @@
-use std::{
-    marker::PhantomData,
-    mem::{size_of, zeroed},
-};
+use std::mem::{size_of, zeroed};
 
 use crate::{
     bindings::{
@@ -13,22 +10,20 @@ use crate::{
     status::Status,
 };
 
-pub struct Temperature<'library> {
+pub struct Temperature {
     handle: u32,
     index: u32,
-    _library_lifetime: PhantomData<&'library ()>,
 }
 
-impl<'library> Temperature<'library> {
+impl Temperature {
     pub(crate) fn amount(handle: u32) -> usize {
         unsafe { CgosTemperatureCount(handle) as usize }
     }
 
-    pub(crate) fn new(handle: u32, index: usize) -> Temperature<'library> {
+    pub(crate) fn new(handle: u32, index: usize) -> Temperature {
         Self {
             handle,
             index: index.try_into().unwrap(),
-            _library_lifetime: PhantomData,
         }
     }
 

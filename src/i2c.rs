@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::bindings::{
     CgosI2CCount, CgosI2CGetFrequency, CgosI2CGetMaxFrequency, CgosI2CIsAvailable, CgosI2CRead,
     CgosI2CReadRegister, CgosI2CSetFrequency, CgosI2CType, CgosI2CWrite, CgosI2CWriteReadCombined,
@@ -19,7 +17,7 @@ pub enum I2cErr {
 
 pub type I2cResult<T> = Result<T, I2cErr>;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum I2cType {
     Unknown,
     Primary,
@@ -54,12 +52,11 @@ impl From<u32> for I2cType {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct I2c<'library> {
+pub struct I2c {
     handle: u32,
     index: u32,
-    _library_lifetime: PhantomData<&'library ()>,
 }
-impl<'library> I2c<'library> {
+impl I2c {
     pub(crate) fn new(handle: u32, index: usize) -> I2cResult<Self> {
         let num_busses = Self::amount(handle);
         if index > num_busses.saturating_sub(1) {
@@ -70,7 +67,6 @@ impl<'library> I2c<'library> {
         let ret = Self {
             handle,
             index: index,
-            _library_lifetime: PhantomData,
         };
         Ok(ret)
     }
@@ -79,17 +75,17 @@ impl<'library> I2c<'library> {
         unsafe { CgosI2CCount(handle) as usize }
     }
 
-    pub fn i2c_type(&'library self) -> I2cType {
+    pub fn i2c_type(&self) -> I2cType {
         let raw = unsafe { CgosI2CType(self.handle, self.index) };
         I2cType::from(raw)
     }
 
-    pub fn is_available(&'library self) -> bool {
+    pub fn is_available(&self) -> bool {
         let raw = unsafe { CgosI2CIsAvailable(self.handle, self.index) };
         raw == 1
     }
 
-    pub fn read(&'library self, bus_addr: u8, rd_data: &mut [u8]) -> I2cResult<()> {
+    pub fn read(&self, bus_addr: u8, rd_data: &mut [u8]) -> I2cResult<()> {
         let retcode = unsafe {
             CgosI2CRead(
                 self.handle,
@@ -107,9 +103,8 @@ impl<'library> I2c<'library> {
         }
     }
 
-    pub fn write(&'library self, bus_addr: u8, wr_data: &[u8]) -> I2cResult<()> {
+    pub fn write(&self, bus_addr: u8, wr_data: &[u8]) -> I2cResult<()> {
         let retcode = unsafe {
-            dbg!(&wr_data, self.handle, self.index);
             CgosI2CWrite(
                 self.handle,
                 self.index,
@@ -126,7 +121,7 @@ impl<'library> I2c<'library> {
         }
     }
 
-    pub fn read_register(&'library self, bus_addr: u8, reg_addr: u16) -> I2cResult<u8> {
+    pub fn read_register(&self, bus_addr: u8, reg_addr: u16) -> I2cResult<u8> {
         let mut ret: u8 = 0;
         let retval = unsafe {
             CgosI2CReadRegister(
@@ -145,7 +140,7 @@ impl<'library> I2c<'library> {
         }
     }
 
-    pub fn write_register(&'library self, bus_addr: u8, reg_addr: u16, val: u8) -> I2cResult<()> {
+    pub fn write_register(&self, bus_addr: u8, reg_addr: u16, val: u8) -> I2cResult<()> {
         let retval =
             unsafe { CgosI2CWriteRegister(self.handle, self.index, bus_addr, reg_addr, val) };
 
@@ -157,7 +152,7 @@ impl<'library> I2c<'library> {
     }
 
     pub fn write_read_combined(
-        &'library self,
+        &self,
         bus_addr: u8,
         wr_data: &[u8],
         rd_data: &mut [u8],
@@ -182,7 +177,7 @@ impl<'library> I2c<'library> {
         }
     }
 
-    pub fn get_max_frequency(&'library self) -> I2cResult<u32> {
+    pub fn get_max_frequency(&self) -> I2cResult<u32> {
         let mut ret = 0;
         let retval =
             unsafe { CgosI2CGetMaxFrequency(self.handle, self.index, &mut ret as *mut u32) };
@@ -194,7 +189,7 @@ impl<'library> I2c<'library> {
         }
     }
 
-    pub fn get_frequency(&'library self) -> I2cResult<u32> {
+    pub fn get_frequency(&self) -> I2cResult<u32> {
         let mut ret = 0;
         let retval = unsafe { CgosI2CGetFrequency(self.handle, self.index, &mut ret as *mut u32) };
 
@@ -205,7 +200,7 @@ impl<'library> I2c<'library> {
         }
     }
 
-    pub fn set_frequency(&'library self, frequency: u32) -> I2cResult<()> {
+    pub fn set_frequency(&self, frequency: u32) -> I2cResult<()> {
         let retval = unsafe { CgosI2CSetFrequency(self.handle, self.index, frequency) };
 
         if retval != 0 {

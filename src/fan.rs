@@ -1,7 +1,4 @@
-use std::{
-    marker::PhantomData,
-    mem::{size_of, zeroed},
-};
+use std::mem::{size_of, zeroed};
 
 use crate::{
     bindings::{
@@ -13,22 +10,20 @@ use crate::{
     status::Status,
 };
 
-pub struct Fan<'library> {
+pub struct Fan {
     handle: u32,
     index: u32,
-    _library_lifetime: PhantomData<&'library ()>,
 }
 
-impl<'library> Fan<'library> {
+impl Fan {
     pub(crate) fn amount(handle: u32) -> usize {
         unsafe { CgosFanCount(handle) as usize }
     }
 
-    pub(crate) fn new(handle: u32, index: usize) -> Fan<'library> {
+    pub(crate) fn new(handle: u32, index: usize) -> Fan {
         Self {
             handle,
             index: index.try_into().unwrap(),
-            _library_lifetime: PhantomData,
         }
     }
 

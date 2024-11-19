@@ -1,6 +1,5 @@
 use std::{
     ffi::{CStr, CString},
-    marker::PhantomData,
     mem::{size_of, zeroed},
     time::Duration,
 };
@@ -10,50 +9,47 @@ use bitflags::bitflags;
 use crate::{
     bindings::{
         CgosBoardClose, CgosBoardCount, CgosBoardGetBootCounter, CgosBoardGetInfoA,
-        CgosBoardGetNameA, CgosBoardOpen, CgosBoardOpenByNameA, CGOSBOARDINFOA, CGOSTIME,
-        CGOS_BOARD_CLASS_CPU, CGOS_BOARD_CLASS_IO, CGOS_BOARD_CLASS_VGA,
+        CgosBoardGetNameA, CgosBoardOpen, CgosBoardOpenByNameA, CgosLibInitialize, CGOSBOARDINFOA,
+        CGOSTIME, CGOS_BOARD_CLASS_CPU, CGOS_BOARD_CLASS_IO, CGOS_BOARD_CLASS_VGA,
     },
     fan::Fan,
     i2c::{I2c, I2cResult},
     storage_area::{StorageArea, StorageAreaType},
     temperature::Temperature,
+    vga::{Vga, VgaResult},
 };
 
 pub const FLAGS: u32 = 0;
 
-pub struct Board<'library> {
+pub struct Board {
     handle: u32,
-    _library_lifetime: PhantomData<&'library ()>,
 }
 
-impl<'library> Board<'library> {
-    pub(crate) fn amount(class: BoardClass) -> usize {
+impl Board {
+    pub fn amount(class: BoardClass) -> usize {
+        assert_ne!(unsafe { CgosLibInitialize() }, 0);
         unsafe { CgosBoardCount(class.bits, FLAGS) as usize }
     }
 
-    pub(crate) fn new(class: BoardClass, index: usize) -> Board<'library> {
+    pub fn new(class: BoardClass, index: usize) -> Board {
+        assert_ne!(unsafe { CgosLibInitialize() }, 0);
         let mut handle = Default::default();
         assert_ne!(
             unsafe { CgosBoardOpen(class.bits, index.try_into().unwrap(), FLAGS, &mut handle) },
             0,
         );
-        Self {
-            handle,
-            _library_lifetime: PhantomData,
-        }
+        Self { handle }
     }
 
-    pub(crate) fn from_name(name: &str) -> Board<'library> {
+    pub fn from_name(name: &str) -> Board {
+        assert_ne!(unsafe { CgosLibInitialize() }, 0);
         let name = CString::new(name).unwrap();
         let mut handle = Default::default();
         assert_ne!(
             unsafe { CgosBoardOpenByNameA(name.as_ptr(), &mut handle) },
             0,
         );
-        Self {
-            handle,
-            _library_lifetime: PhantomData,
-        }
+        Self { handle }
     }
 
     pub fn name(&self) -> String {
@@ -98,7 +94,7 @@ impl<'library> Board<'library> {
         Temperature::amount(self.handle)
     }
 
-    pub fn get_temperature(&'library self, index: usize) -> Temperature<'library> {
+    pub fn get_temperature(&self, index: usize) -> Temperature {
         Temperature::new(self.handle, index)
     }
 
@@ -106,7 +102,7 @@ impl<'library> Board<'library> {
         Fan::amount(self.handle)
     }
 
-    pub fn get_fan(&'library self, index: usize) -> Fan<'library> {
+    pub fn get_fan(&self, index: usize) -> Fan {
         Fan::new(self.handle, index)
     }
 
@@ -114,27 +110,32 @@ impl<'library> Board<'library> {
         StorageArea::amount(self.handle, type_)
     }
 
-    pub fn get_storage_area_from_index(&'library self, index: usize) -> StorageArea<'library> {
+    pub fn get_storage_area_from_index(&self, index: usize) -> StorageArea {
         StorageArea::from_index(self.handle, index)
     }
 
-    pub fn get_storage_area_from_type(
-        &'library self,
-        type_: StorageAreaType,
-    ) -> StorageArea<'library> {
+    pub fn get_storage_area_from_type(&self, type_: StorageAreaType) -> StorageArea {
         StorageArea::from_type(self.handle, type_)
     }
 
-    pub fn get_number_of_i2c(&'library self) -> usize {
+    pub fn get_number_of_i2c(&self) -> usize {
         I2c::amount(self.handle)
     }
 
-    pub fn get_i2c(&'library self, index: usize) -> I2cResult<I2c<'library>> {
+    pub fn get_i2c(&self, index: usize) -> I2cResult<I2c> {
         I2c::new(self.handle, index)
+    }
+
+    pub fn get_number_of_vga(&self) -> usize {
+        Vga::amount(self.handle)
+    }
+
+    pub fn get_vga(&self, index: usize) -> VgaResult<Vga> {
+        Vga::new(self.handle, index)
     }
 }
 
-impl<'library> Drop for Board<'library> {
+impl Drop for Board {
     fn drop(&mut self) {
         assert_ne!(unsafe { CgosBoardClose(self.handle) }, 0);
     }
