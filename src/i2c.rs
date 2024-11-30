@@ -8,19 +8,18 @@ use crate::bindings::{
 };
 
 /// Error type for I2c operations
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub enum I2cErr {
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+pub enum Error {
     /// User-supplied index is out of range
-    IdxOutOfRange,
-
+    IndexOutOfRange,
     /// I2c bus transaction failed
-    BusErr,
+    Bus,
 }
 
-pub type I2cResult<T> = Result<T, I2cErr>;
+pub type Result<T> = Result<T, I2cErr>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum I2cType {
+pub enum I2cKind {
     Unknown,
     Primary,
     Smb,
@@ -28,20 +27,20 @@ pub enum I2cType {
     CongatecInternalUse(u32),
 }
 
-impl Into<u32> for I2cType {
-    fn into(self) -> u32 {
-        match self {
-            Self::Unknown => CGOS_I2C_TYPE_UNKNOWN,
-            Self::Primary => CGOS_I2C_TYPE_PRIMARY,
-            Self::Smb => CGOS_I2C_TYPE_SMB,
-            Self::Ddc => CGOS_I2C_TYPE_DDC,
-            Self::CongatecInternalUse(x) => x,
+impl From<I2cType> for u32 {
+    fn from(val: I2cType) -> Self {
+        match val {
+            I2cType::Unknown => CGOS_I2C_TYPE_UNKNOWN,
+            I2cType::Primary => CGOS_I2C_TYPE_PRIMARY,
+            I2cType::Smb => CGOS_I2C_TYPE_SMB,
+            I2cType::Ddc => CGOS_I2C_TYPE_DDC,
+            I2cType::CongatecInternalUse(x) => x,
         }
     }
 }
 
 impl From<u32> for I2cType {
-    //note: On my devboard libcgos does return undeclared values for some busses, hence the need to return an error instead of panic
+    // note: On my devboard libcgos does return undeclared values for some busses, hence the need to return an error instead of panic
     fn from(value: u32) -> I2cType {
         match value {
             CGOS_I2C_TYPE_UNKNOWN => Self::Unknown,
@@ -59,7 +58,8 @@ pub struct I2c<'library> {
     index: u32,
     _library_lifetime: PhantomData<&'library ()>,
 }
-impl<'library> I2c<'library> {
+
+impl I2c<'_> {
     pub(crate) fn new(handle: u32, index: usize) -> I2cResult<Self> {
         let num_busses = Self::amount(handle);
         if index > num_busses.saturating_sub(1) {
@@ -69,7 +69,7 @@ impl<'library> I2c<'library> {
         let index = index.try_into().map_err(|_| I2cErr::IdxOutOfRange)?;
         let ret = Self {
             handle,
-            index: index,
+            index,
             _library_lifetime: PhantomData,
         };
         Ok(ret)
@@ -79,7 +79,7 @@ impl<'library> I2c<'library> {
         unsafe { CgosI2CCount(handle) as usize }
     }
 
-    pub fn i2c_type(&'library self) -> I2cType {
+    pub fn i2c_type(&self) -> I2cType {
         let raw = unsafe { CgosI2CType(self.handle, self.index) };
         I2cType::from(raw)
     }
@@ -89,7 +89,7 @@ impl<'library> I2c<'library> {
         raw == 1
     }
 
-    pub fn read(&'library self, bus_addr: u8, rd_data: &mut [u8]) -> I2cResult<()> {
+    pub fn read(&'library self, bus_address: u8, data: &mut [u8]) -> I2cResult<()> {
         let retcode = unsafe {
             CgosI2CRead(
                 self.handle,
@@ -100,16 +100,15 @@ impl<'library> I2c<'library> {
             )
         };
 
-        if retcode != 0 {
-            return Ok(());
-        } else {
+        if retcode == 0 {
             return Err(I2cErr::BusErr);
         }
+
+        Ok(())
     }
 
     pub fn write(&'library self, bus_addr: u8, wr_data: &[u8]) -> I2cResult<()> {
         let retcode = unsafe {
-            dbg!(&wr_data, self.handle, self.index);
             CgosI2CWrite(
                 self.handle,
                 self.index,
@@ -127,7 +126,7 @@ impl<'library> I2c<'library> {
     }
 
     pub fn read_register(&'library self, bus_addr: u8, reg_addr: u16) -> I2cResult<u8> {
-        let mut ret: u8 = 0;
+        let mut data = 0;
         let retval = unsafe {
             CgosI2CReadRegister(
                 self.handle,
