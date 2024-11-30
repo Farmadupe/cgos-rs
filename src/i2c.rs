@@ -16,7 +16,7 @@ pub enum Error {
     Bus,
 }
 
-pub type Result<T> = Result<T, I2cErr>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum I2cKind {
@@ -27,21 +27,21 @@ pub enum I2cKind {
     CongatecInternalUse(u32),
 }
 
-impl From<I2cType> for u32 {
-    fn from(val: I2cType) -> Self {
+impl From<I2cKind> for u32 {
+    fn from(val: I2cKind) -> Self {
         match val {
-            I2cType::Unknown => CGOS_I2C_TYPE_UNKNOWN,
-            I2cType::Primary => CGOS_I2C_TYPE_PRIMARY,
-            I2cType::Smb => CGOS_I2C_TYPE_SMB,
-            I2cType::Ddc => CGOS_I2C_TYPE_DDC,
-            I2cType::CongatecInternalUse(x) => x,
+            I2cKind::Unknown => CGOS_I2C_TYPE_UNKNOWN,
+            I2cKind::Primary => CGOS_I2C_TYPE_PRIMARY,
+            I2cKind::Smb => CGOS_I2C_TYPE_SMB,
+            I2cKind::Ddc => CGOS_I2C_TYPE_DDC,
+            I2cKind::CongatecInternalUse(x) => x,
         }
     }
 }
 
-impl From<u32> for I2cType {
+impl From<u32> for I2cKind {
     // note: On my devboard libcgos does return undeclared values for some busses, hence the need to return an error instead of panic
-    fn from(value: u32) -> I2cType {
+    fn from(value: u32) -> I2cKind {
         match value {
             CGOS_I2C_TYPE_UNKNOWN => Self::Unknown,
             CGOS_I2C_TYPE_PRIMARY => Self::Primary,
@@ -60,13 +60,13 @@ pub struct I2c<'library> {
 }
 
 impl I2c<'_> {
-    pub(crate) fn new(handle: u32, index: usize) -> I2cResult<Self> {
+    pub(crate) fn new(handle: u32, index: usize) -> Result<Self> {
         let num_busses = Self::amount(handle);
         if index > num_busses.saturating_sub(1) {
-            return Err(I2cErr::IdxOutOfRange);
+            return Err(Error::IndexOutOfRange);
         }
 
-        let index = index.try_into().map_err(|_| I2cErr::IdxOutOfRange)?;
+        let index = index.try_into().map_err(|_| Error::IndexOutOfRange)?;
         let ret = Self {
             handle,
             index,
@@ -79,35 +79,35 @@ impl I2c<'_> {
         unsafe { CgosI2CCount(handle) as usize }
     }
 
-    pub fn i2c_type(&self) -> I2cType {
+    pub fn i2c_type(&self) -> I2cKind {
         let raw = unsafe { CgosI2CType(self.handle, self.index) };
-        I2cType::from(raw)
+        I2cKind::from(raw)
     }
 
-    pub fn is_available(&'library self) -> bool {
+    pub fn is_available(&self) -> bool {
         let raw = unsafe { CgosI2CIsAvailable(self.handle, self.index) };
         raw == 1
     }
 
-    pub fn read(&'library self, bus_address: u8, data: &mut [u8]) -> I2cResult<()> {
+    pub fn read(&self, bus_address: u8, data: &mut [u8]) -> Result<()> {
         let retcode = unsafe {
             CgosI2CRead(
                 self.handle,
                 self.index,
-                bus_addr,
-                rd_data.as_mut_ptr(),
-                rd_data.len() as u32,
+                bus_address,
+                data.as_mut_ptr(),
+                data.len() as u32,
             )
         };
 
         if retcode == 0 {
-            return Err(I2cErr::BusErr);
+            return Err(Error::Bus);
         }
 
         Ok(())
     }
 
-    pub fn write(&'library self, bus_addr: u8, wr_data: &[u8]) -> I2cResult<()> {
+    pub fn write(&self, bus_addr: u8, wr_data: &[u8]) -> Result<()> {
         let retcode = unsafe {
             CgosI2CWrite(
                 self.handle,
@@ -118,51 +118,51 @@ impl I2c<'_> {
             )
         };
 
-        if retcode != 0 {
-            return Ok(());
-        } else {
-            return Err(I2cErr::BusErr);
+        if retcode == 0 {
+            return Err(Error::Bus);
         }
+
+        Ok(())
     }
 
-    pub fn read_register(&'library self, bus_addr: u8, reg_addr: u16) -> I2cResult<u8> {
-        let mut data = 0;
-        let retval = unsafe {
+    pub fn read_register(&self, bus_addr: u8, reg_addr: u16) -> Result<u8> {
+        let mut data: u8 = 0;
+        let retcode = unsafe {
             CgosI2CReadRegister(
                 self.handle,
                 self.index,
                 bus_addr,
                 reg_addr,
-                &mut ret as *mut u8,
+                &mut data as *mut u8,
             )
         };
 
-        if retval != 0 {
-            Ok(ret)
-        } else {
-            Err(I2cErr::BusErr)
+        if retcode == 0 {
+            return Err(Error::Bus);
         }
+
+        Ok(data)
     }
 
-    pub fn write_register(&'library self, bus_addr: u8, reg_addr: u16, val: u8) -> I2cResult<()> {
-        let retval =
+    pub fn write_register(&self, bus_addr: u8, reg_addr: u16, val: u8) -> Result<()> {
+        let retcode =
             unsafe { CgosI2CWriteRegister(self.handle, self.index, bus_addr, reg_addr, val) };
 
-        if retval != 0 {
-            Ok(())
-        } else {
-            Err(I2cErr::BusErr)
+        if retcode == 0 {
+            return Err(Error::Bus);
         }
+
+        Ok(())
     }
 
     pub fn write_read_combined(
-        &'library self,
+        &self,
         bus_addr: u8,
         wr_data: &[u8],
         rd_data: &mut [u8],
-    ) -> I2cResult<()> {
+    ) -> Result<()> {
         let wr_len = wr_data.len();
-        let retval = unsafe {
+        let retcode = unsafe {
             CgosI2CWriteReadCombined(
                 self.handle,
                 self.index,
@@ -174,43 +174,43 @@ impl I2c<'_> {
             )
         };
 
-        if retval != 0 {
-            return Ok(());
-        } else {
-            return Err(I2cErr::BusErr);
+        if retcode == 0 {
+            return Err(Error::Bus);
         }
+
+        Ok(())
     }
 
-    pub fn get_max_frequency(&'library self) -> I2cResult<u32> {
+    pub fn get_max_frequency(&self) -> Result<u32> {
         let mut ret = 0;
-        let retval =
+        let retcode =
             unsafe { CgosI2CGetMaxFrequency(self.handle, self.index, &mut ret as *mut u32) };
 
-        if retval != 0 {
-            return Ok(ret);
-        } else {
-            return Err(I2cErr::BusErr);
+        if retcode == 0 {
+            return Err(Error::Bus);
         }
+
+        Ok(ret)
     }
 
-    pub fn get_frequency(&'library self) -> I2cResult<u32> {
+    pub fn get_frequency(&self) -> Result<u32> {
         let mut ret = 0;
-        let retval = unsafe { CgosI2CGetFrequency(self.handle, self.index, &mut ret as *mut u32) };
+        let retcode = unsafe { CgosI2CGetFrequency(self.handle, self.index, &mut ret as *mut u32) };
 
-        if retval != 0 {
-            return Ok(ret);
-        } else {
-            return Err(I2cErr::BusErr);
+        if retcode == 0 {
+            return Err(Error::Bus);
         }
+
+        Ok(ret)
     }
 
-    pub fn set_frequency(&'library self, frequency: u32) -> I2cResult<()> {
-        let retval = unsafe { CgosI2CSetFrequency(self.handle, self.index, frequency) };
+    pub fn set_frequency(&self, frequency: u32) -> Result<()> {
+        let retcode = unsafe { CgosI2CSetFrequency(self.handle, self.index, frequency) };
 
-        if retval != 0 {
-            return Ok(());
-        } else {
-            return Err(I2cErr::BusErr);
+        if retcode == 0 {
+            return Err(Error::Bus);
         }
+
+        Ok(())
     }
 }
