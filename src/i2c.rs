@@ -90,13 +90,17 @@ impl I2c<'_> {
     }
 
     pub fn read(&self, bus_address: u8, data: &mut [u8]) -> Result<()> {
+        let data_length = data
+            .len()
+            .try_into()
+            .expect("Length of data is less than 2**32 bytes");
         let retcode = unsafe {
             CgosI2CRead(
                 self.handle,
                 self.index,
                 bus_address,
                 data.as_mut_ptr(),
-                data.len() as u32,
+                data_length,
             )
         };
 
@@ -107,14 +111,18 @@ impl I2c<'_> {
         Ok(())
     }
 
-    pub fn write(&self, bus_addr: u8, wr_data: &[u8]) -> Result<()> {
+    pub fn write(&self, bus_address: u8, data: &[u8]) -> Result<()> {
+        let data_length = data
+            .len()
+            .try_into()
+            .expect("Length of data is less than 2**32 bytes");
         let retcode = unsafe {
             CgosI2CWrite(
                 self.handle,
                 self.index,
-                bus_addr,
-                wr_data.as_ptr() as *mut u8,
-                wr_data.len() as u32,
+                bus_address,
+                data.as_ptr() as *mut u8,
+                data_length,
             )
         };
 
@@ -125,14 +133,14 @@ impl I2c<'_> {
         Ok(())
     }
 
-    pub fn read_register(&self, bus_addr: u8, reg_addr: u16) -> Result<u8> {
+    pub fn read_register(&self, bus_address: u8, reg_address: u16) -> Result<u8> {
         let mut data: u8 = 0;
         let retcode = unsafe {
             CgosI2CReadRegister(
                 self.handle,
                 self.index,
-                bus_addr,
-                reg_addr,
+                bus_address,
+                reg_address,
                 &mut data as *mut u8,
             )
         };
@@ -144,9 +152,9 @@ impl I2c<'_> {
         Ok(data)
     }
 
-    pub fn write_register(&self, bus_addr: u8, reg_addr: u16, val: u8) -> Result<()> {
+    pub fn write_register(&self, bus_address: u8, reg_address: u16, val: u8) -> Result<()> {
         let retcode =
-            unsafe { CgosI2CWriteRegister(self.handle, self.index, bus_addr, reg_addr, val) };
+            unsafe { CgosI2CWriteRegister(self.handle, self.index, bus_address, reg_address, val) };
 
         if retcode == 0 {
             return Err(Error::Bus);
@@ -157,20 +165,29 @@ impl I2c<'_> {
 
     pub fn write_read_combined(
         &self,
-        bus_addr: u8,
-        wr_data: &[u8],
-        rd_data: &mut [u8],
+        bus_address: u8,
+        write_data: &[u8],
+        read_data: &mut [u8],
     ) -> Result<()> {
-        let wr_len = wr_data.len();
+        let write_length = write_data
+            .len()
+            .try_into()
+            .expect("Length of write_data is less than 2**32 bytes");
+
+        let read_length = read_data
+            .len()
+            .try_into()
+            .expect("Length of read_data is less than 2**32 bytes");
+
         let retcode = unsafe {
             CgosI2CWriteReadCombined(
                 self.handle,
                 self.index,
-                bus_addr,
-                wr_data.as_ptr() as *mut u8,
-                wr_len.try_into().unwrap(),
-                rd_data.as_mut_ptr(),
-                rd_data.len() as u32,
+                bus_address,
+                write_data.as_ptr() as *mut u8,
+                write_length,
+                read_data.as_mut_ptr(),
+                read_length,
             )
         };
 
