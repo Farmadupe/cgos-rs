@@ -25,31 +25,41 @@ pub struct Board {
     handle: u32,
 }
 
+pub struct BoardInitErr {}
+
 impl Board {
-    pub fn amount(class: BoardClass) -> usize {
-        assert_ne!(unsafe { CgosLibInitialize() }, 0);
-        unsafe { CgosBoardCount(class.bits, FLAGS) as usize }
+    pub fn amount(class: BoardClass) -> Result<usize, BoardInitErr> {
+        if let 0 = unsafe { CgosLibInitialize() } {
+            return Err(BoardInitErr {});
+        }
+        let ret = unsafe { CgosBoardCount(class.bits, FLAGS) as usize };
+
+        Ok(ret)
     }
 
-    pub fn new(class: BoardClass, index: usize) -> Board {
-        assert_ne!(unsafe { CgosLibInitialize() }, 0);
+    pub fn new(class: BoardClass, index: usize) -> Result<Board, BoardInitErr> {
+        if let 0 = unsafe { CgosLibInitialize() } {
+            return Err(BoardInitErr {});
+        }
         let mut handle = Default::default();
         assert_ne!(
             unsafe { CgosBoardOpen(class.bits, index.try_into().unwrap(), FLAGS, &mut handle) },
             0,
         );
-        Self { handle }
+        Ok(Self { handle })
     }
 
-    pub fn from_name(name: &str) -> Board {
-        assert_ne!(unsafe { CgosLibInitialize() }, 0);
+    pub fn from_name(name: &str) -> Result<Board, BoardInitErr> {
+        if let 0 = unsafe { CgosLibInitialize() } {
+            return Err(BoardInitErr {});
+        }
         let name = CString::new(name).unwrap();
         let mut handle = Default::default();
         assert_ne!(
             unsafe { CgosBoardOpenByNameA(name.as_ptr(), &mut handle) },
             0,
         );
-        Self { handle }
+        Ok(Self { handle })
     }
 
     pub fn name(&self) -> String {
