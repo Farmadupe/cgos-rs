@@ -125,7 +125,7 @@ impl<'library> Board<'library> {
         StorageArea::from_type(self.handle, type_)
     }
 
-    pub fn get_number_of_i2c(&'library self) -> usize {
+    pub fn get_number_of_i2c(&self) -> usize {
         I2c::amount(self.handle)
     }
 
